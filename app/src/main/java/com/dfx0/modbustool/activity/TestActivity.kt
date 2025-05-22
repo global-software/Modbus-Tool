@@ -7,7 +7,7 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
-import com.dfx0.modbustool.activity.utils.ModbusManager
+import com.dfx0.modbustool.utils.ModbusManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay

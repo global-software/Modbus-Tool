@@ -3,6 +3,7 @@ package com.dfx0.modbustool.model
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.ColumnInfo
+import com.dfx0.modbustool.model.enums.VarType
 
 @Entity(tableName = "modbus_tag")
 data class VarTag(
@@ -11,7 +12,7 @@ data class VarTag(
     val tag: String,
 
     @ColumnInfo(name = "data_type")
-    val dataType: String? = null,
+    val dataType: VarType? = null,
 
     @ColumnInfo(name = "describe")
     val describe: String? = null,

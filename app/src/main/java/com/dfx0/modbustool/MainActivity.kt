@@ -5,9 +5,14 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -20,17 +25,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.dfx0.modbustool.activity.utils.ModbusManager
+import com.dfx0.modbustool.utils.ModbusManager
 import com.dfx0.modbustool.viewmodel.SharedViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dfx0.modbustool.model.VarTag
+import com.dfx0.modbustool.model.enums.VarType
 import com.dfx0.modbustool.viewmodel.DBViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -45,6 +52,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+var isAddVarTag = false
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,9 +65,9 @@ fun DrawerApp() {
     val isConnectedPLC by sharedViewModel.isConnectedPLC.collectAsState()
     var selectedTab by remember { mutableStateOf("首页") }
     val tabs = if (isConnectedPLC) {
-        listOf("首页", "写入测试", "读取测试","变量管理","变量展示")
+        listOf("首页", "写入测试", "读取测试","变量管理","变量读取")
     } else {
-        listOf("首页","变量管理","变量展示")
+        listOf("首页","变量管理","变量读取")
     }
 
     ModalNavigationDrawer(
@@ -99,10 +107,11 @@ fun DrawerApp() {
                 .padding(padding)
                 .fillMaxSize()) {
                 when (selectedTab) {
-                    "首页" -> InitMainPage(sharedViewModel)
+                    "首页" -> InitMainPage(dbViewModel,sharedViewModel)
                     "写入测试" -> ModbusTestScreen()
                     "读取测试" -> ModbusReadScreen()
-                    "变量管理" -> VarTagManager(dbViewModel)
+                    "变量管理" -> VarTagManager(dbViewModel,sharedViewModel)
+                    "变量读取" -> ShowVarTag(dbViewModel,sharedViewModel)
                 }
             }
         }
@@ -112,7 +121,7 @@ fun DrawerApp() {
 
 
 @Composable
-fun InitMainPage(sharedViewModel: SharedViewModel){
+fun InitMainPage(dbViewModel: DBViewModel,sharedViewModel: SharedViewModel){
     val context = LocalContext.current
     var connectedResult by remember {
         mutableStateOf("请先连接..")
@@ -121,17 +130,25 @@ fun InitMainPage(sharedViewModel: SharedViewModel){
         mutableStateOf("192.168.1.88")
     }
 
+    LaunchedEffect(Unit) {
+        sharedViewModel.updateVarTagList(dbViewModel.getVarTagDao().getAll())
+    }
+
     val scope = rememberCoroutineScope()
 
 
     OutlinedCard(
-        modifier = Modifier.padding(10.dp),
+        modifier = Modifier
+            .padding(10.dp)
+            .fillMaxSize(1f),
     ) {
         Column(modifier = Modifier.padding(12.dp)){
             OutlinedTextField(
                 value = ipAddress,
                 onValueChange = { ipAddress = it },
-                label = { Text("地址") }
+                label = {
+                    Text("地址",  modifier = Modifier.fillMaxWidth(1f),)
+                }
             )
 
             OutlinedButton(onClick = {
@@ -142,7 +159,7 @@ fun InitMainPage(sharedViewModel: SharedViewModel){
                   sharedViewModel.updateConnectedPLC(connected)
               }
             }) {
-                Text(text = "连接")
+                Text(text = "连接", modifier = Modifier.fillMaxWidth(1f))
             }
 
             Text(
@@ -261,21 +278,48 @@ fun ModbusReadScreen() {
 
         Spacer(modifier = Modifier.height(16.dp))
         Text("读取结果: $readResult")
+
+        Spacer(modifier = Modifier.height(26.dp))
+        var beginAddress by remember { mutableStateOf("") }
+        var varType by remember { mutableStateOf(VarType.BOOL) }
+        OutlinedTextField(
+            value = beginAddress,
+            onValueChange = { beginAddress = it },
+            label = { Text("起始地址") },
+            modifier = Modifier.fillMaxWidth(1f)
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        VarTypeDropdown(selectedType = varType, onTypeSelected = {
+            varType = it
+        })
+        Spacer(modifier = Modifier.height(12.dp))
+        Button(onClick = {
+            scope.launch {
+                val r = withContext(Dispatchers.IO) {
+                    ModbusManager.readModbusValue(beginAddress.toIntOrNull() ?: 0, varType)
+                }
+                if (r != null && readResult != r.toString()) {
+                    readResult = r.toString()
+                }
+            }
+        }) {
+            Text("读取")
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("读取结果: $readResult")
     }
 }
 
 
+/**
+ * The composable is used to manage VarTags
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun VarTagManager(dbViewModel: DBViewModel){
-    var varTags by remember { mutableStateOf(listOf<VarTag>()) }
+fun VarTagManager(dbViewModel: DBViewModel,sharedViewModel:SharedViewModel){
+    var varTags = sharedViewModel.getVarTag.collectAsState().value
     var varTag by remember { mutableStateOf(VarTag("")) }
-
-    LaunchedEffect(key1 = Unit, block = {
-        varTags = dbViewModel.getVarTagDao().getAll()
-    })
     var showDialog by remember { mutableStateOf(false) }
-
 
     Scaffold(
         topBar = {
@@ -284,6 +328,7 @@ fun VarTagManager(dbViewModel: DBViewModel){
                 actions = {
                     IconButton(onClick = {
                         showDialog = true
+                        isAddVarTag = true
                         varTag = VarTag("")
                     }) {
                         Icon(Icons.Default.Add, contentDescription = "添加")
@@ -304,6 +349,7 @@ fun VarTagManager(dbViewModel: DBViewModel){
                             CoroutineScope(Dispatchers.IO).launch{
                                 dbViewModel.getVarTagDao().delete(varTags[index])
                                 varTags = dbViewModel.getVarTagDao().getAll()
+                                sharedViewModel.updateVarTagList(varTags)
                             }
 
                             true
@@ -328,14 +374,16 @@ fun VarTagManager(dbViewModel: DBViewModel){
                     CoroutineScope(Dispatchers.IO).launch {
                         dbViewModel.getVarTagDao().insert(it)
                         val updated = dbViewModel.getVarTagDao().getAll()
+                        sharedViewModel.updateVarTagList(updated)
                         withContext(Dispatchers.Main) {
-                            varTags = updated
                             showDialog = false
+                            isAddVarTag = false
                         }
                     }
                 },
                 onCancel = {
                     showDialog = false
+                    isAddVarTag = false
                 })
             },
             confirmButton = {
@@ -351,6 +399,9 @@ fun VarTagManager(dbViewModel: DBViewModel){
 }
 
 
+/**
+ * The composable is used to manage a VarTag, and returns callback functions when the VarTag is modified
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VarTagCard(tag: VarTag, onDelete: ((VarTag) -> Boolean)? = null, onUpdate: ((VarTag) -> Boolean)? = null){
@@ -371,7 +422,7 @@ fun VarTagCard(tag: VarTag, onDelete: ((VarTag) -> Boolean)? = null, onUpdate: (
         }
     ){
         Row{
-            Text("[${tag.tag}]  ${tag.describe}", color = Color.Red, modifier = Modifier.padding(5.dp), fontSize = 20.sp)
+            Text("[${tag.tag}]  ${tag.describe} | [${tag.modBusAddress}]", color = Color.Red, modifier = Modifier.padding(5.dp), fontSize = 20.sp)
 
         }
         Row {
@@ -442,6 +493,9 @@ fun VarTagCard(tag: VarTag, onDelete: ((VarTag) -> Boolean)? = null, onUpdate: (
 }
 
 
+/**
+ * The composable is used to adding or updating the VarTags
+ */
 @Composable
 fun VarTagInputFormWithSave(
     initialVarTag: VarTag? = null,
@@ -449,12 +503,11 @@ fun VarTagInputFormWithSave(
     onCancel: (() -> Unit)? = null // 可选的取消回调
 ) {
     var tag by remember { mutableStateOf(initialVarTag?.tag ?: "") }
-    var dataType by remember { mutableStateOf(initialVarTag?.dataType ?: "") }
+    var dataType by remember { mutableStateOf(initialVarTag?.dataType ?: VarType.INT16) }
     var describe by remember { mutableStateOf(initialVarTag?.describe ?: "") }
     var trueText by remember { mutableStateOf(initialVarTag?.trueText ?: "") }
     var falseText by remember { mutableStateOf(initialVarTag?.falseText ?: "") }
     var unit by remember { mutableStateOf(initialVarTag?.unit ?: "") }
-
     val scrollState = rememberScrollState()
 
     Column(
@@ -466,17 +519,16 @@ fun VarTagInputFormWithSave(
             value = tag,
             onValueChange = { tag = it },
             label = { Text("地址") },
+            enabled = isAddVarTag,
             singleLine = true
         )
         Spacer(modifier = Modifier.height(8.dp))
 
-        OutlinedTextField(
-            value = dataType,
-            onValueChange = { dataType = it },
-            label = { Text("类型") },
-            singleLine = true
+        VarTypeDropdown(
+            selectedType = dataType,
+            onTypeSelected = { dataType = it }
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         OutlinedTextField(
             value = describe,
@@ -485,37 +537,38 @@ fun VarTagInputFormWithSave(
         )
         Spacer(modifier = Modifier.height(8.dp))
 
-        OutlinedTextField(
-            value = trueText,
-            onValueChange = { trueText = it },
-            label = { Text("True文本") },
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(8.dp))
+      if(dataType == VarType.BOOL ||dataType == VarType.JoyBOOL){
+          OutlinedTextField(
+              value = trueText,
+              onValueChange = { trueText = it },
+              label = { Text("True文本") },
+              singleLine = true
+          )
+          Spacer(modifier = Modifier.height(8.dp))
 
-        OutlinedTextField(
-            value = falseText,
-            onValueChange = { falseText = it },
-            label = { Text("False文本") },
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-
-        OutlinedTextField(
-            value = unit,
-            onValueChange = { unit = it },
-            label = { Text("单位") },
-            singleLine = true
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-
+          OutlinedTextField(
+              value = falseText,
+              onValueChange = { falseText = it },
+              label = { Text("False文本") },
+              singleLine = true
+          )
+          Spacer(modifier = Modifier.height(16.dp))
+      }else{
+          OutlinedTextField(
+              value = unit,
+              onValueChange = { unit = it },
+              label = { Text("单位") },
+              singleLine = true
+          )
+          Spacer(modifier = Modifier.height(16.dp))
+      }
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Button(
                 onClick = {
                     // 点击保存时构造VarTag并回调
                     val varTag = VarTag(
                         tag = tag,
-                        dataType = dataType.takeIf { it.isNotBlank() },
+                        dataType = dataType,
                         describe = describe.takeIf { it.isNotBlank() },
                         trueText = trueText.takeIf { it.isNotBlank() },
                         falseText = falseText.takeIf { it.isNotBlank() },
@@ -534,5 +587,220 @@ fun VarTagInputFormWithSave(
                 }
             }
         }
+    }
+}
+
+
+/***
+ * the onValueChange callback is used to write values to Modbus when the value is changed
+ */
+@Composable
+fun VarTagValueEditor(
+    varTag: VarTag,
+    value: String,
+    onValueChange: (String) -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp)
+    ) {
+        Text(
+            text = "${varTag.describe ?: varTag.tag}：",
+            modifier = Modifier.weight(1.5f),
+            fontSize = 18.sp
+        )
+
+        if (varTag.dataType == VarType.BOOL) {
+            val checked = value == "1"
+            Switch(
+                checked = checked,
+                onCheckedChange = { isChecked ->
+                    onValueChange(if (isChecked) "1" else "0")
+                }
+            )
+        } else if(varTag.dataType == VarType.JoyBOOL){
+            PressGestureButton(varTag,
+                onPress = {
+                    onValueChange("1")
+                    //write to modbus
+                    println("pressed")
+                },
+                onRelease = {
+                    onValueChange("0")
+                    //write to modbus
+                    println("released")
+                } ,
+                onLongPress = {
+                    println("long Press")
+                })
+        }else{
+            OutlinedTextField(
+                value = value,
+                onValueChange = {
+                    onValueChange(it)
+                },
+                modifier = Modifier
+                    .weight(1.5f)
+                    .align(Alignment.CenterVertically),
+                enabled = false,
+                singleLine = true,
+                textStyle = LocalTextStyle.current.copy(
+                    fontSize = 20.sp, // 设置字体大小
+                    textAlign = TextAlign.Center // 设置文本居中
+                )
+            )
+
+            Text(text = varTag.unit ?: "",
+                modifier = Modifier
+                    .weight(1f)
+                    .align(Alignment.CenterVertically),
+                textAlign = TextAlign.Center)
+        }
+    }
+}
+
+
+@Composable
+fun ShowVarTag(dbViewModel: DBViewModel,sharedViewModel: SharedViewModel){
+    val varTags = sharedViewModel.getVarTag.collectAsState().value
+    //the varTagValues should come from ViewModel
+    val varTagValues = sharedViewModel.getTagValueDic.collectAsState().value
+    LaunchedEffect(Unit) {
+        while (true){
+            sharedViewModel.initializeVarTagValuesIfNeeded()
+            delay(100)
+        }
+    }
+
+    val boolTags = varTags.filter { it.dataType == VarType.BOOL }
+    val joyBoolTags = varTags.filter { it.dataType == VarType.JoyBOOL }
+    val otherTags = varTags.filter { it.dataType != VarType.BOOL && it.dataType !=  VarType.JoyBOOL}
+    LazyColumn {
+        items(boolTags) { tag ->
+            val value = varTagValues[tag.tag] ?: ""
+            VarTagValueEditor(
+                varTag = tag,
+                value = value,
+                onValueChange = { newValue ->
+                    //write to Modbus
+                    //varTagValues[tag.tag] = newValue
+                }
+            )
+        }
+        items(joyBoolTags) { tag ->
+            val value = varTagValues[tag.tag] ?: ""
+             VarTagValueEditor(
+                varTag = tag,
+                value = value,
+                onValueChange = { newValue ->
+                    //write to Modbus
+                    //varTagValues[tag.tag] = newValue
+                }
+            )
+        }
+        items(otherTags) { tag ->
+            val value = varTagValues[tag.tag] ?: ""
+
+            VarTagValueEditor(
+                varTag = tag,
+                value = value,
+                onValueChange = { newValue ->
+                    //write to Modbus
+                    //varTagValues[tag.tag] = newValue
+                }
+            )
+        }
+    }
+
+}
+
+
+@Composable
+fun VarTypeDropdown(
+    selectedType: VarType,
+    onTypeSelected: (VarType) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box (Modifier.clickable {
+        expanded = true
+    }){
+        Box(
+            modifier = Modifier
+                .border(
+                    width = 1.dp,
+                    color = Color.Gray,
+                    shape = RoundedCornerShape(4.dp)
+                )
+                .fillMaxWidth(1f)
+                .background(Color.White, shape = RoundedCornerShape(4.dp))
+                .clickable {
+                    expanded = true
+                }
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Text(
+                modifier = Modifier.fillMaxWidth(1f),
+                text = "类型：" + selectedType.displayName,
+                fontSize = 13.sp,
+                color = Color.Black
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = {
+                expanded = false
+            }
+        ) {
+            VarType.entries.forEach { type ->
+                DropdownMenuItem(
+                    text = { Text(type.displayName) },
+                    onClick = {
+                        onTypeSelected(type)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun PressGestureButton(
+    varTag: VarTag,
+    onPress: () -> Unit,
+    onRelease: () -> Unit,
+    onLongPress: () -> Unit
+) {
+    var isPressed by remember { mutableStateOf(false) }
+
+    Box(
+        modifier = Modifier
+            .width(150.dp)
+            .height(40.dp)
+            .background(if(isPressed) Color.Red else Color.LightGray)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = {
+                        onPress()
+                        isPressed = true
+                        tryAwaitRelease() // 等待释放事件
+                        onRelease()
+                        isPressed = false
+                    },
+                    onLongPress = {
+                        onLongPress()
+                    }
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text = if(isPressed) varTag.trueText ?: (varTag.describe ?: varTag.tag) else varTag.falseText ?: (varTag.describe ?: varTag.tag),
+            fontSize = 20.sp,
+            color = if(isPressed) Color.White else Color.Black,
+            textAlign = TextAlign.Center)
     }
 }
