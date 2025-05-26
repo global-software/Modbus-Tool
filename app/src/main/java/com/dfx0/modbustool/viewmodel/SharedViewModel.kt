@@ -5,7 +5,6 @@ import androidx.lifecycle.ViewModel
 import com.dfx0.modbustool.model.VarTag
 import com.dfx0.modbustool.model.enums.VarType
 import com.dfx0.modbustool.utils.ModbusManager
-import com.serotonin.modbus4j.code.DataType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -78,7 +77,7 @@ class SharedViewModel : ViewModel() {
                 }
                 _varTagValueDic.value = currentValues
                 Log.e("CC", currentValues.toString())
-                delay(1000)
+                delay(1)
             }
         }
     }
