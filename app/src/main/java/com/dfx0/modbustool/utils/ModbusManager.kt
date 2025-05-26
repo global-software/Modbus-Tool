@@ -22,6 +22,7 @@ object ModbusManager {
     private var ip = "192.168.1.88"
     private var port = "502"
     private val slaveId = 1
+    var logText: ((String) -> Unit)? = null
 
     /**
      * Initial The modbus Tcp
@@ -35,8 +36,10 @@ object ModbusManager {
         master = ModbusFactory().createTcpMaster(params, true) // true = keep-alive
         try {
             master?.init()
+            logText?.invoke("${ip}连接成功")
             true
         } catch (e: Exception) {
+            logText?.invoke("${ip}连接失败,Catch:${e.message}")
             e.printStackTrace()
             false
         }
@@ -67,6 +70,7 @@ object ModbusManager {
                 master?.setValue(locator, value)
                 true
             } catch (e: Exception) {
+                logText?.invoke("${offset}写入失败,Catch:${e.message}")
                 e.printStackTrace()
                 false
             }
@@ -107,6 +111,7 @@ object ModbusManager {
                 val response = master?.send(request) as? ReadHoldingRegistersResponse
 
                 if (response == null || response.isException) {
+                    logText?.invoke("Modbus 响应错误: ${response?.exceptionMessage}")
                     Log.e(TAG,"Modbus 响应错误: ${response?.exceptionMessage}")
                     null
                 } else {
@@ -115,6 +120,7 @@ object ModbusManager {
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
+                logText?.invoke("读取失败,Catch:${e.message}")
                 null
             }
         }
@@ -148,6 +154,7 @@ object ModbusManager {
                     else -> tag.modBusAddress ?: -1
                 }
             } catch (e: Exception) {
+                logText?.invoke("解析 ${tag.tag} 时出错: ${e.message}")
                 println("解析 ${tag.tag} 时出错: ${e.message}")
                 tag.modBusAddress ?: -1
             }
@@ -168,10 +175,10 @@ object ModbusManager {
             val locator = when (type) {
                 VarType.BOOL,VarType.JoyBOOL -> {
                     if(address>= 24576)
-                        return BaseLocator.coilStatus(slaveId, address)
+                       BaseLocator.coilStatus(slaveId, address)
                     else {
                         //if the modbus address doesn't come from %IX or %QX,read it from %MW
-                        return createLocator(slaveId, address, DataType.TWO_BYTE_INT_SIGNED, isHolding)
+                        createLocator(slaveId, address, DataType.TWO_BYTE_INT_SIGNED, isHolding)
                     }
                 }
                 VarType.INT16 -> createLocator(slaveId, address, DataType.TWO_BYTE_INT_SIGNED, isHolding)
@@ -212,8 +219,47 @@ object ModbusManager {
 
 
 
+    fun writeModbusValue(varTag: VarTag, value : Any, isHolding: Boolean = true): Boolean {
+        if(varTag.modBusAddress == null) return false
+        return try {
+            val locator = when (varTag.dataType) {
+                VarType.BOOL, VarType.JoyBOOL -> {
+                    // BOOL: 写入 Coil（线圈）
+                    if (varTag.modBusAddress >= 24576)
+                        BaseLocator.coilStatus(slaveId, varTag.modBusAddress)
+                    else
+                        createLocator(slaveId, varTag.modBusAddress, DataType.TWO_BYTE_INT_SIGNED, isHolding)
+                }
+
+                VarType.INT16 -> createLocator(slaveId, varTag.modBusAddress, DataType.TWO_BYTE_INT_SIGNED, isHolding)
+                VarType.UINT16 -> createLocator(slaveId, varTag.modBusAddress, DataType.TWO_BYTE_INT_UNSIGNED, isHolding)
+                VarType.INT32 -> createLocator(slaveId, varTag.modBusAddress, DataType.FOUR_BYTE_INT_SIGNED, isHolding)
+                VarType.UINT32 -> createLocator(slaveId, varTag.modBusAddress, DataType.FOUR_BYTE_INT_UNSIGNED, isHolding)
+                VarType.REAL -> createLocator(slaveId, varTag.modBusAddress, DataType.FOUR_BYTE_FLOAT, isHolding)
+                else -> throw IllegalArgumentException("不支持的数据类型: ${varTag.dataType}")
+            }
+            if((varTag.dataType == VarType.BOOL || varTag.dataType == VarType.JoyBOOL)){
+               if(value.toString() == "true" || value.toString() == "1")
+                   master?.setValue(locator, if(varTag.modBusAddress >= 24576) true else 1)
+                else
+                   master?.setValue(locator, if(varTag.modBusAddress >= 24576) false else 0)
+            }else{
+                master?.setValue(locator, value)
+            }
+            logText?.invoke("写入成功: [${varTag.tag}]${varTag.describe} -> ${value}")
+            true
+        } catch (e: Exception) {
+            logText?.invoke("写入失败: ${e.message}")
+            println("写入失败: ${e.message}")
+            false
+        }
+    }
+
+
+
     fun close() {
         master?.destroy()
         master = null
     }
+
 }

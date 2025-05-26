@@ -38,6 +38,7 @@ import kotlinx.coroutines.launch
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dfx0.modbustool.model.VarTag
 import com.dfx0.modbustool.model.enums.VarType
+import com.dfx0.modbustool.utils.PrefsUtil
 import com.dfx0.modbustool.viewmodel.DBViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -59,16 +60,22 @@ var isAddVarTag = false
 @Preview
 fun DrawerApp() {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+
     val scope = rememberCoroutineScope()
     val sharedViewModel: SharedViewModel = viewModel()
     val dbViewModel: DBViewModel = viewModel()
     val isConnectedPLC by sharedViewModel.isConnectedPLC.collectAsState()
     var selectedTab by remember { mutableStateOf("首页") }
     val tabs = if (isConnectedPLC) {
-        listOf("首页", "写入测试", "读取测试","变量管理","变量读取")
+        listOf("首页", "写入测试", "读取测试","变量管理","操作界面","关于")
     } else {
-        listOf("首页","变量管理","变量读取")
+        listOf("首页","变量管理","关于")
     }
+
+
+
+    //initialize delegate function
+    ModbusManager.logText = sharedViewModel::log
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -111,24 +118,63 @@ fun DrawerApp() {
                     "写入测试" -> ModbusTestScreen()
                     "读取测试" -> ModbusReadScreen()
                     "变量管理" -> VarTagManager(dbViewModel,sharedViewModel)
-                    "变量读取" -> ShowVarTag(dbViewModel,sharedViewModel)
+                    "操作界面" -> ShowVarTag(dbViewModel,sharedViewModel)
+                    "关于" -> About()
                 }
             }
         }
     }
 }
 
+@Preview
+@Composable
+fun About(){
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column {
+            Text(
+                text = "关于我们",
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
 
+            Text(
+                text = "这是一款使用 Modbus 协议进行 PLC 通信的调试工具，适用于工程师调试、学习与演示场景。功能不断完善中...",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            Text(
+                text = "杭州正宇科技有限公司\n版本号：v1.0.0\n联系邮箱：dfx0@outlook.com\n联系电话: 17322209993",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+
+        Text(
+            text = "© 2025 杭州正宇科技有限公司 All rights reserved.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color.Gray,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
+    }
+}
 
 @Composable
 fun InitMainPage(dbViewModel: DBViewModel,sharedViewModel: SharedViewModel){
     val context = LocalContext.current
-    var connectedResult by remember {
-        mutableStateOf("请先连接..")
+    var log by remember {
+        mutableStateOf("")
     }
     var ipAddress by remember {
         mutableStateOf("192.168.1.88")
     }
+    if(PrefsUtil.getIpAddress(context)!="")
+        ipAddress = PrefsUtil.getIpAddress(context)
+    log = sharedViewModel.getLogText.collectAsState().value
 
     LaunchedEffect(Unit) {
         sharedViewModel.updateVarTagList(dbViewModel.getVarTagDao().getAll())
@@ -152,20 +198,94 @@ fun InitMainPage(dbViewModel: DBViewModel,sharedViewModel: SharedViewModel){
             )
 
             OutlinedButton(onClick = {
-              scope.launch {
-                  val connected = ModbusManager.initTcp(ipAddress)
-                  Toast.makeText(context, if (connected) "ModBus 连接成功" else "ModBus 连接失败", Toast.LENGTH_SHORT).show()
-                  connectedResult = if (connected) "ModBus 连接成功" else "ModBus 连接失败"
-                  sharedViewModel.updateConnectedPLC(connected)
-              }
+                var connected = false
+                scope.launch {
+                    connected = ModbusManager.initTcp(ipAddress)
+                    sharedViewModel.log(if (connected) "ModBus 连接成功" else "ModBus 连接失败")
+                    if(connected)
+                        PrefsUtil.saveIpAddress(context,ipAddress)
+                    sharedViewModel.updateConnectedPLC(connected)
+                    withContext (Dispatchers.Main){
+                        Toast.makeText(context, if (connected) "ModBus 连接成功" else "ModBus 连接失败", Toast.LENGTH_SHORT).show()
+                    }
+                }
             }) {
                 Text(text = "连接", modifier = Modifier.fillMaxWidth(1f))
             }
 
-            Text(
-                text = "$connectedResult",
-                modifier = Modifier.padding(12.dp)
-            )
+            OutlinedButton(onClick = {
+                scope.launch {
+                    sharedViewModel.clearLog()
+                }
+            }) {
+                Text(text = "清空Log", modifier = Modifier.fillMaxWidth(1f))
+            }
+
+            OutlinedButton(onClick = {
+                scope.launch {
+                    dbViewModel.getVarTagDao().insert(VarTag(
+                        tag = "%MW1000",
+                        describe = "总产量",
+                        dataType = VarType.INT32,
+                        unit = "个"
+                    ))
+                    dbViewModel.getVarTagDao().insert(VarTag(
+                        tag = "%MW1002",
+                        describe = "今日产量",
+                        dataType = VarType.INT16,
+                        unit = "个"
+                    ))
+                    dbViewModel.getVarTagDao().insert(VarTag(
+                        tag = "%MW1004",
+                        describe = "生产速度",
+                        dataType = VarType.REAL,
+                        unit = "个"
+                    ))
+                    dbViewModel.getVarTagDao().insert(VarTag(
+                        tag = "%MW1006",
+                        describe = "左移",
+                        dataType = VarType.JoyBOOL,
+                        trueText = "移动",
+                        falseText = "停止",
+                    ))
+                    dbViewModel.getVarTagDao().insert(VarTag(
+                        tag = "%MW1008",
+                        describe = "右移",
+                        dataType = VarType.JoyBOOL,
+                        trueText = "移动",
+                        falseText = "停止",
+                    ))
+                    dbViewModel.getVarTagDao().insert(VarTag(
+                        tag = "%MW1009",
+                        describe = "抓取",
+                        dataType = VarType.JoyBOOL,
+                        trueText = "抓取中",
+                        falseText = "停止",
+                    ))
+                    dbViewModel.getVarTagDao().insert(VarTag(
+                        tag = "%MW1010",
+                        describe = "设备开关",
+                        dataType = VarType.BOOL,
+                    ))
+                    sharedViewModel.log("初始化成功!")
+                }
+            }) {
+                Text(text = "初始化测试数据", modifier = Modifier.fillMaxWidth(1f))
+            }
+
+            val scrollState = rememberScrollState()
+
+            Column(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .verticalScroll(scrollState)
+            ){
+                Text(
+                    text = log,
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
+
         }
     }
 }
@@ -621,7 +741,8 @@ fun VarTagValueEditor(
                 }
             )
         } else if(varTag.dataType == VarType.JoyBOOL){
-            PressGestureButton(varTag,
+            val checked = value == "true"
+            PressGestureButton(varTag,checked,
                 onPress = {
                     onValueChange("true")
                     //write to modbus
@@ -685,6 +806,9 @@ fun ShowVarTag(dbViewModel: DBViewModel,sharedViewModel: SharedViewModel){
                 onValueChange = { newValue ->
                     //write to Modbus
                     //varTagValues[tag.tag] = newValue
+                    CoroutineScope(Dispatchers.IO).launch {
+                        ModbusManager.writeModbusValue(tag,newValue)
+                    }
                 }
             )
         }
@@ -696,6 +820,9 @@ fun ShowVarTag(dbViewModel: DBViewModel,sharedViewModel: SharedViewModel){
                 onValueChange = { newValue ->
                     //write to Modbus
                     //varTagValues[tag.tag] = newValue
+                   CoroutineScope(Dispatchers.IO).launch {
+                       ModbusManager.writeModbusValue(tag,newValue)
+                   }
                 }
             )
         }
@@ -708,6 +835,9 @@ fun ShowVarTag(dbViewModel: DBViewModel,sharedViewModel: SharedViewModel){
                 onValueChange = { newValue ->
                     //write to Modbus
                     //varTagValues[tag.tag] = newValue
+                    CoroutineScope(Dispatchers.IO).launch {
+                        ModbusManager.writeModbusValue(tag,newValue)
+                    }
                 }
             )
         }
@@ -770,17 +900,18 @@ fun VarTypeDropdown(
 @Composable
 fun PressGestureButton(
     varTag: VarTag,
+    press : Boolean,
     onPress: () -> Unit,
     onRelease: () -> Unit,
     onLongPress: () -> Unit
 ) {
     var isPressed by remember { mutableStateOf(false) }
-
+    isPressed = press
     Box(
         modifier = Modifier
             .width(150.dp)
             .height(40.dp)
-            .background(if(isPressed) Color.Red else Color.LightGray)
+            .background(if (isPressed) Color.Red else Color.LightGray)
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
