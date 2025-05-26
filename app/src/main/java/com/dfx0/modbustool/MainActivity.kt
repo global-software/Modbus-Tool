@@ -613,22 +613,22 @@ fun VarTagValueEditor(
         )
 
         if (varTag.dataType == VarType.BOOL) {
-            val checked = value == "1"
+            val checked = value == "true"
             Switch(
                 checked = checked,
                 onCheckedChange = { isChecked ->
-                    onValueChange(if (isChecked) "1" else "0")
+                    onValueChange(if (isChecked) "true" else "false")
                 }
             )
         } else if(varTag.dataType == VarType.JoyBOOL){
             PressGestureButton(varTag,
                 onPress = {
-                    onValueChange("1")
+                    onValueChange("true")
                     //write to modbus
                     println("pressed")
                 },
                 onRelease = {
-                    onValueChange("0")
+                    onValueChange("false")
                     //write to modbus
                     println("released")
                 } ,
@@ -668,10 +668,9 @@ fun ShowVarTag(dbViewModel: DBViewModel,sharedViewModel: SharedViewModel){
     //the varTagValues should come from ViewModel
     val varTagValues = sharedViewModel.getTagValueDic.collectAsState().value
     LaunchedEffect(Unit) {
-        while (true){
-            sharedViewModel.initializeVarTagValuesIfNeeded()
-            delay(100)
-        }
+        sharedViewModel.initializeVarTagValuesIfNeeded()
+        delay(100)
+        sharedViewModel.readVarTag()
     }
 
     val boolTags = varTags.filter { it.dataType == VarType.BOOL }

@@ -166,8 +166,14 @@ object ModbusManager {
     ): Any? {
         return try {
             val locator = when (type) {
-                VarType.BOOL -> BaseLocator.coilStatus(slaveId, address)
-                VarType.JoyBOOL  -> BaseLocator.coilStatus(slaveId, address)
+                VarType.BOOL,VarType.JoyBOOL -> {
+                    if(address>= 24576)
+                        return BaseLocator.coilStatus(slaveId, address)
+                    else {
+                        //if the modbus address doesn't come from %IX or %QX,read it from %MW
+                        return createLocator(slaveId, address, DataType.TWO_BYTE_INT_SIGNED, isHolding)
+                    }
+                }
                 VarType.INT16 -> createLocator(slaveId, address, DataType.TWO_BYTE_INT_SIGNED, isHolding)
                 VarType.UINT16 -> createLocator(slaveId, address, DataType.TWO_BYTE_INT_UNSIGNED, isHolding)
                 VarType.INT32 -> createLocator(slaveId, address, DataType.FOUR_BYTE_INT_SIGNED, isHolding)

@@ -1,11 +1,18 @@
 package com.dfx0.modbustool.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import com.dfx0.modbustool.model.VarTag
 import com.dfx0.modbustool.model.enums.VarType
 import com.dfx0.modbustool.utils.ModbusManager
+import com.serotonin.modbus4j.code.DataType
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 class SharedViewModel : ViewModel() {
     private val _isConnectedPLC = MutableStateFlow(false)
@@ -49,5 +56,30 @@ class SharedViewModel : ViewModel() {
             }
         }
         _varTagValueDic.value = currentValues
+    }
+
+    private var readJob: Job? = null
+    suspend fun readVarTag(){
+        if (readJob?.isActive == true) return
+        readJob = CoroutineScope(Dispatchers.IO).launch {
+            while (true){
+                val currentValues = _varTagValueDic.value.toMutableMap()
+                _varTags.value.forEach {
+                    if(it.modBusAddress != null && it.dataType!=null) {
+                        var v = ModbusManager.readModbusValue(it.modBusAddress, it.dataType)
+                        if(it.dataType == VarType.BOOL || it.dataType == VarType.JoyBOOL)
+                            if(v.toString() == "1" || v.toString() == "true")
+                                currentValues[it.tag] = "true"
+                            else
+                                currentValues[it.tag] = "false"
+                        else
+                            currentValues[it.tag] = v.toString()
+                    }
+                }
+                _varTagValueDic.value = currentValues
+                Log.e("CC", currentValues.toString())
+                delay(1000)
+            }
+        }
     }
 }
