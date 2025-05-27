@@ -143,7 +143,7 @@ fun About(){
             )
 
             Text(
-                text = "这是一款使用 Modbus 协议进行 PLC 通信的调试工具，适用于工程师调试、学习与演示场景。功能不断完善中...",
+                text = "这是一款使用 Modbus 协议进行 PLC 通信的调试工具，适用于工程师调试：\n1. 支持连接指定PLC设备\n2. 支持连续读、批量读取指定地址\n3. 支持读取指定地址数据并自动转为指定格式\n4. 支持添加/管理需要操作的变量到界面上，并能实时读取PLC数据到屏幕上。\n5. 功能不断完善中...",
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
