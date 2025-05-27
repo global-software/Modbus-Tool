@@ -149,13 +149,13 @@ fun About(){
             )
 
             Text(
-                text = "杭州正宇科技有限公司\n版本号：v1.0.0\n联系邮箱：dfx0@outlook.com\n联系电话: 17322209993",
+                text = "版本号：v1.0.0\n联系邮箱：dfx0@outlook.com",
                 style = MaterialTheme.typography.bodySmall
             )
         }
 
         Text(
-            text = "© 2025 杭州正宇科技有限公司 All rights reserved.",
+            text = "© 2025 0xdFFF All rights reserved.",
             style = MaterialTheme.typography.bodySmall,
             color = Color.Gray,
             modifier = Modifier.align(Alignment.CenterHorizontally)
