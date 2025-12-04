@@ -1,7 +1,8 @@
 # Modbus-Tool
 
 #### 介绍
-This is an Android project for a ModBus Tool
+This is a ModBus Tool on Android, which supports debugging all kinds of addresses input by users and creating different data sets to manage corresponding data from different factories.
+
 
  **这是一个关于Moudbus的安卓项目**
 - 采用Composable组件API开发，支持动态添加变量
@@ -17,4 +18,5 @@ Kotlin
 ![输入图片说明](https://foruda.gitee.com/images/1747897820190118441/7d63f854_8657183.png "屏幕截图")
 ![输入图片说明](https://foruda.gitee.com/images/1747897831863215300/3f115636_8657183.png "屏幕截图")
 ![输入图片说明](https://foruda.gitee.com/images/1747897839420678633/e3c42694_8657183.png "屏幕截图")
+
 ![输入图片说明](img%E5%9B%BE%E7%89%87.png)
